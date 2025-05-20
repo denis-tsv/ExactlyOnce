@@ -55,24 +55,15 @@ public class InboxBackgroundService : BackgroundService
         while (!cancellationToken.IsCancellationRequested)
         {
             var results = new List<ConsumeResult<TKey, TValue>>();
-            var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            cts.CancelAfter(_options.Value.NoKafkaMessagesDelay);
-            while(!cancellationToken.IsCancellationRequested)
+            var endTime = DateTime.UtcNow + _options.Value.NoKafkaMessagesDelay;
+            while(results.Count < _options.Value.BatchSize && DateTime.UtcNow < endTime)
             {
-                try
-                {
-                    var result = consumer.Consume(cts.Token);
-            
-                    results.Add(result);
-                }
-                catch (OperationCanceledException)
-                {
-                    break;
-                }
+                var remainingTime = endTime - DateTime.UtcNow;
+                var result = consumer.Consume(remainingTime);
+                if (result == null || result.IsPartitionEOF) continue;
                 
-                if (results.Count == _options.Value.BatchSize) break;
+                results.Add(result);
             }
-        
             if (results.Any()) await ProcessAsync(results, cancellationToken);
         }
     }
