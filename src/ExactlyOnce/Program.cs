@@ -24,7 +24,7 @@ builder.Services.AddDbContextPool<AppDbContext>(optionsBuilder =>
     optionsBuilder
         .UseNpgsql(
             dataSource,
-            options => options.MigrationsHistoryTable("_migrations", "exactly-once"))
+            options => options.MigrationsHistoryTable("_migrations", "exactly_once"))
         .UseSnakeCaseNamingConvention()
         .AddInterceptors(new ForUpdateInterceptor());
 });
