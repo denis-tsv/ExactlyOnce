@@ -74,8 +74,9 @@ public class ExactlyOnceBackgroundService : BackgroundService
         offset.AvailableAfter = DateTime.UtcNow;
         offset.LastProcessedOffset = inboxMessage.Offset;
         await ProcessMessageAsync(inboxMessage, scope.ServiceProvider, cancellationToken);
-
+        await dbContext.SaveChangesAsync(cancellationToken); //SaveChanges can be missed in ProcessMessageAsync  
         await transaction.CommitAsync(cancellationToken);
+        
         return true;
     }
 
