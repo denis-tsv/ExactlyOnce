@@ -54,7 +54,7 @@ app.MapPost("/messages", async (MessageDto[] messages, IServiceProvider sp, Canc
         {
             var activityContext = Activity.Current?.Context;
             var headers = activityContext.GetHeaders();
-            headers.Add(HeaderNames.IdempotenceKey, Guid.CreateVersion7().ToString("D"));
+            headers.Add(HeaderNames.IdempotenceKey, dto.IdempotenceKey);
             var producer = sp.GetRequiredService<IProducer<TKey, string>>();
             var message = new Message<TKey, string>
             {
@@ -83,5 +83,6 @@ app.Run();
 public record MessageDto(
     string Topic,
     string? Key,
+    string IdempotenceKey,
     string Payload
     );
