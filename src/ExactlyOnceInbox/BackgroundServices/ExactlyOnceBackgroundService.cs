@@ -92,7 +92,13 @@ public class ExactlyOnceBackgroundService : BackgroundService
             {
                 await ProcessMessageAsync(inboxMessage, scope.ServiceProvider, cancellationToken);
             }
-            catch (DbUpdateException dpDbUpdateException) when(dpDbUpdateException.InnerException is PostgresException {SqlState: "23505", ConstraintName: "pk_processed_inbox_messages"})
+            //EF Core
+            catch (DbUpdateException dbDbUpdateException) when(dbDbUpdateException.InnerException is PostgresException {SqlState: "23505", ConstraintName: "pk_processed_inbox_messages"})
+            {
+                _logger.LogInformation("Message already processed: {IdempotenceKey}", inboxMessage.IdempotenceKey);
+            }
+            //Linq2db
+            catch (PostgresException postgresException) when(postgresException is {SqlState: "23505", ConstraintName: "pk_processed_inbox_messages"})
             {
                 _logger.LogInformation("Message already processed: {IdempotenceKey}", inboxMessage.IdempotenceKey);
             }

@@ -1,5 +1,7 @@
 using ExactlyOnceInbox.Db;
 using ExactlyOnceInbox.Entities;
+using LinqToDB;
+using LinqToDB.EntityFrameworkCore;
 using MediatR;
 
 namespace ExactlyOnceInbox.Commands;
@@ -17,13 +19,13 @@ public class Topic1CommandHandler : IRequestHandler<Topic1Command>
         //change business entities
         // ...
         
-        //add processed message
-        _dbContext.ProcessedInboxMessages.Add(new ProcessedInboxMessage
-        {
-            IdempotenceKey = request.IdempotenceKey
-        });
+        await using var transaction = await _dbContext.Database.BeginTransactionAsync(cancellationToken);
+        await using var dataConnection = _dbContext.CreateLinqToDBConnection();        
+        //insert processed message
+        await dataConnection.InsertAsync(new ProcessedInboxMessage {IdempotenceKey = request.IdempotenceKey}, token: cancellationToken);
 
         //save entities with processed message in the same transaction 
         await _dbContext.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
     }
 }
