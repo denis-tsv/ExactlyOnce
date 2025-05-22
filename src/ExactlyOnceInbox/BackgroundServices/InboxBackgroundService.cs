@@ -85,9 +85,7 @@ public class InboxBackgroundService : BackgroundService
                 Offset = consumeResult.Offset.Value,
                 CreatedAt = consumeResult.Message.Timestamp.UtcDateTime,
                 IdempotenceKey = headers[HeaderNames.IdempotenceKey],
-                Payload = consumeResult.Message.Value is string stringValue 
-                    ? stringValue 
-                    : JsonSerializer.Serialize(consumeResult.Message.Value),
+                Payload = consumeResult.Message.Value as string ?? JsonSerializer.Serialize(consumeResult.Message.Value),
                 Headers = headers
             };
         }).ToList();
