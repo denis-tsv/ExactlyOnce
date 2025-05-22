@@ -5,6 +5,7 @@ using ExactlyOnce.Configs;
 using ExactlyOnce.Db;
 using ExactlyOnce.Entities;
 using LinqToDB;
+using LinqToDB.Data;
 using LinqToDB.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 
@@ -84,17 +85,15 @@ public class InboxBackgroundService : BackgroundService
                 Offset = consumeResult.Offset.Value,
                 CreatedAt = consumeResult.Message.Timestamp.UtcDateTime,
                 IdempotenceKey = headers[HeaderNames.IdempotenceKey],
-                Payload = JsonSerializer.Serialize(consumeResult.Message.Value),
+                Payload = consumeResult.Message.Value is string stringValue 
+                    ? stringValue 
+                    : JsonSerializer.Serialize(consumeResult.Message.Value),
                 Headers = headers
             };
         }).ToList();
 
         await dataConnection
             .GetTable<InboxMessage>()
-            .Merge()
-            .Using(messages)
-            .On(entity => entity.IdempotenceKey, dto => dto.IdempotenceKey)
-            .InsertWhenNotMatched()
-            .MergeAsync(cancellationToken);
+            .BulkCopyAsync(new BulkCopyOptions { BulkCopyType = BulkCopyType.ProviderSpecific }, messages, cancellationToken);
     }
 }

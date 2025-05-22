@@ -11,7 +11,7 @@ public class AppDbContext : DbContext
 
     public DbSet<InboxMessage> InboxMessages { get; set; }
     public DbSet<InboxMessageOffset> InboxMessageOffsets { get; set; }
-    public DbSet<ProcessedData> ProcessedDatas { get; set; }
+    public DbSet<ProcessedInboxMessage> ProcessedInboxMessages { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

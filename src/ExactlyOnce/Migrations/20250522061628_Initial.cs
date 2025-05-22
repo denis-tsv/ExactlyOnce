@@ -46,7 +46,7 @@ namespace ExactlyOnce.Migrations
                     partition = table.Column<int>(type: "integer", nullable: false),
                     offset = table.Column<long>(type: "bigint", nullable: false),
                     idempotence_key = table.Column<string>(type: "character varying(128)", maxLength: 128, nullable: false),
-                    payload = table.Column<string>(type: "jsonb", nullable: false),
+                    payload = table.Column<string>(type: "character varying(128)", maxLength: 128, nullable: false),
                     headers = table.Column<Dictionary<string, string>>(type: "jsonb", nullable: false),
                     created_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false, defaultValueSql: "now()")
                 },
@@ -56,17 +56,15 @@ namespace ExactlyOnce.Migrations
                 });
 
             migrationBuilder.CreateTable(
-                name: "processed_datas",
+                name: "processed_inbox_messages",
                 schema: "exactly_once",
                 columns: table => new
                 {
-                    id = table.Column<int>(type: "integer", nullable: false)
-                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
-                    data = table.Column<string>(type: "jsonb", nullable: false)
+                    idempotence_key = table.Column<string>(type: "character varying(128)", maxLength: 128, nullable: false)
                 },
                 constraints: table =>
                 {
-                    table.PrimaryKey("pk_processed_datas", x => x.id);
+                    table.PrimaryKey("pk_processed_inbox_messages", x => x.idempotence_key);
                 });
 
             migrationBuilder.InsertData(
@@ -84,13 +82,6 @@ namespace ExactlyOnce.Migrations
                 schema: "exactly_once",
                 table: "inbox_message_offsets",
                 columns: new[] { "topic", "partition" },
-                unique: true);
-
-            migrationBuilder.CreateIndex(
-                name: "ix_inbox_messages_idempotence_key",
-                schema: "exactly_once",
-                table: "inbox_messages",
-                column: "idempotence_key",
                 unique: true);
 
             migrationBuilder.CreateIndex(
@@ -112,7 +103,7 @@ namespace ExactlyOnce.Migrations
                 schema: "exactly_once");
 
             migrationBuilder.DropTable(
-                name: "processed_datas",
+                name: "processed_inbox_messages",
                 schema: "exactly_once");
         }
     }

@@ -13,7 +13,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace ExactlyOnce.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    [Migration("20250520065235_Initial")]
+    [Migration("20250522061628_Initial")]
     partial class Initial
     {
         /// <inheritdoc />
@@ -63,7 +63,8 @@ namespace ExactlyOnce.Migrations
 
                     b.Property<string>("Payload")
                         .IsRequired()
-                        .HasColumnType("jsonb")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
                         .HasColumnName("payload");
 
                     b.Property<string>("Topic")
@@ -74,10 +75,6 @@ namespace ExactlyOnce.Migrations
 
                     b.HasKey("Id")
                         .HasName("pk_inbox_messages");
-
-                    b.HasIndex("IdempotenceKey")
-                        .IsUnique()
-                        .HasDatabaseName("ix_inbox_messages_idempotence_key");
 
                     b.HasIndex("Topic", "Partition", "Offset")
                         .HasDatabaseName("ix_inbox_messages_topic_partition_offset");
@@ -142,24 +139,17 @@ namespace ExactlyOnce.Migrations
                         });
                 });
 
-            modelBuilder.Entity("ExactlyOnce.Entities.ProcessedData", b =>
+            modelBuilder.Entity("ExactlyOnce.Entities.ProcessedInboxMessage", b =>
                 {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer")
-                        .HasColumnName("id");
+                    b.Property<string>("IdempotenceKey")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("idempotence_key");
 
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+                    b.HasKey("IdempotenceKey")
+                        .HasName("pk_processed_inbox_messages");
 
-                    b.Property<string>("Data")
-                        .IsRequired()
-                        .HasColumnType("jsonb")
-                        .HasColumnName("data");
-
-                    b.HasKey("Id")
-                        .HasName("pk_processed_datas");
-
-                    b.ToTable("processed_datas", "exactly_once");
+                    b.ToTable("processed_inbox_messages", "exactly_once");
                 });
 #pragma warning restore 612, 618
         }

@@ -4,7 +4,7 @@ using MediatR;
 
 namespace ExactlyOnce.Commands;
 
-public record Topic1Command(string Payload) : IRequest;
+public record Topic1Command(string Payload, string IdempotenceKey) : IRequest;
 
 public class Topic1CommandHandler : IRequestHandler<Topic1Command>
 {
@@ -14,10 +14,16 @@ public class Topic1CommandHandler : IRequestHandler<Topic1Command>
 
     public async Task Handle(Topic1Command request, CancellationToken cancellationToken)
     {
-        _dbContext.ProcessedDatas.Add(new ProcessedData
+        //change business entities
+        // ...
+        
+        //add processed message
+        _dbContext.ProcessedInboxMessages.Add(new ProcessedInboxMessage
         {
-            Data = request.Payload
+            IdempotenceKey = request.IdempotenceKey
         });
+
+        //save entities with processed message in the same transaction 
         await _dbContext.SaveChangesAsync(cancellationToken);
     }
 }
