@@ -1,7 +1,7 @@
 using System.Data.Common;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 
-namespace ExactlyOnce.Db;
+namespace ExactlyOnceInbox.Db;
 
 public class ForUpdateInterceptor : DbCommandInterceptor
 {

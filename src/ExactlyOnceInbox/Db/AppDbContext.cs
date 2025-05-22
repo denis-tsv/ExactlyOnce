@@ -1,7 +1,7 @@
-using ExactlyOnce.Entities;
+using ExactlyOnceInbox.Entities;
 using Microsoft.EntityFrameworkCore;
 
-namespace ExactlyOnce.Db;
+namespace ExactlyOnceInbox.Db;
 
 public class AppDbContext : DbContext
 {
@@ -9,7 +9,9 @@ public class AppDbContext : DbContext
     {
     }
 
-    public DbSet<ProcessedMessage> ProcessedInboxMessages { get; set; }
+    public DbSet<InboxMessage> InboxMessages { get; set; }
+    public DbSet<InboxMessageOffset> InboxMessageOffsets { get; set; }
+    public DbSet<ProcessedInboxMessage> ProcessedInboxMessages { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

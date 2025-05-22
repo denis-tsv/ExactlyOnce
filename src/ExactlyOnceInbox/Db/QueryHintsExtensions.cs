@@ -1,6 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 
-namespace ExactlyOnce.Db;
+namespace ExactlyOnceInbox.Db;
 
 public static class QueryHintsExtensions
 {

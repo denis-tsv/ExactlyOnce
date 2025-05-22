@@ -1,4 +1,4 @@
-namespace ExactlyOnce.Entities;
+namespace ExactlyOnceInbox.Entities;
 
 public class InboxMessage
 {

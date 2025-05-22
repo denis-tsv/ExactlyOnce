@@ -1,15 +1,12 @@
 using System.Diagnostics;
+using System.Text;
+using Confluent.Kafka;
 using ExactlyOnce.Commands;
 using ExactlyOnce.Configs;
 using ExactlyOnce.Db;
-using ExactlyOnce.Entities;
 using ExactlyOnce.Telemetry;
-using LinqToDB;
-using LinqToDB.DataProvider.PostgreSQL;
-using LinqToDB.EntityFrameworkCore;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Options;
 using Npgsql;
 using OpenTelemetry.Context.Propagation;
 
@@ -18,16 +15,13 @@ namespace ExactlyOnce.BackgroundServices;
 public class ExactlyOnceBackgroundService : BackgroundService
 {
     private readonly IServiceProvider _serviceProvider;
-    private readonly IOptions<ExactlyOnceConfiguration> _options;
     private readonly ILogger<ExactlyOnceBackgroundService> _logger;
 
     public ExactlyOnceBackgroundService(
-         IServiceProvider serviceProvider,
-         IOptions<ExactlyOnceConfiguration> options,
-         ILogger<ExactlyOnceBackgroundService> logger)
+        IServiceProvider serviceProvider, 
+        ILogger<ExactlyOnceBackgroundService> logger)
     {
         _serviceProvider = serviceProvider;
-        _options = options;
         _logger = logger;
     }
     
@@ -37,90 +31,71 @@ public class ExactlyOnceBackgroundService : BackgroundService
         {
             try
             {
-                var dataFound = await ProcessAsync(stoppingToken);
-                if (!dataFound) await Task.Delay(_options.Value.NoInboxMessagesDelay, stoppingToken);
+                var tasks = new[]
+                {
+                    Task.Run(() => ConsumeAsync<string, string>(TopicNames.Topic1, stoppingToken), stoppingToken),
+                    Task.Run(() => ConsumeAsync<Null, string>(TopicNames.Topic2, stoppingToken), stoppingToken),
+                };
+
+                await Task.WhenAll(tasks);
             }
             catch (Exception e)
             {
-                _logger.LogError(e, "Error");                
+                _logger.LogError(e, "Something wrong");
             }
         }
     }
 
-    private async Task<bool> ProcessAsync(CancellationToken cancellationToken)
+    private async Task ConsumeAsync<TKey, TValue>(string topic, CancellationToken cancellationToken)
     {
-        await using var scope = _serviceProvider.CreateAsyncScope();
-        await using var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-        await using var dataConnection = dbContext.CreateLinqToDBConnection();
+        var consumer = _serviceProvider.GetRequiredService<IConsumer<TKey, TValue>>();
+        consumer.Subscribe(topic);
 
-        var offsets = await dataConnection.GetTable<InboxMessageOffset>()
-            .Where(x => x.AvailableAfter < DateTime.UtcNow)
-            .OrderBy(x => x.AvailableAfter)
-            .Take(1)
-            .SubQueryHint(PostgreSQLHints.ForUpdate)
-            .SubQueryHint(PostgreSQLHints.SkipLocked)
-            .AsSubQuery()
-            .UpdateWithOutput(x => x,
-                x => new InboxMessageOffset
-                {
-                    AvailableAfter = x.AvailableAfter + _options.Value.LockedDelay
-                },
-                (_, _, inserted) => inserted)
-            .AsQueryable()
-            .ToArrayAsyncLinqToDB(cancellationToken);
-        var offset = offsets.FirstOrDefault();
-        if (offset == null) return false;
-
-        var inboxMessage = await dbContext.InboxMessages
-            .Where(x => x.Topic == offset.Topic &&
-                        x.Partition == offset.Partition &&
-                        x.Offset > offset.LastProcessedOffset)
-            .OrderBy(x => x.Offset)
-            .FirstOrDefaultAsyncEF(cancellationToken);
-        if (inboxMessage == null)
+        while (!cancellationToken.IsCancellationRequested)
         {
-            offset.AvailableAfter = DateTime.UtcNow + _options.Value.NoInboxMessagesDelay;
-            await dbContext.SaveChangesAsync(cancellationToken);
-            return true;
+            var result = consumer.Consume(TimeSpan.FromMilliseconds(100));
+            if (result == null || result.IsPartitionEOF) continue;
+            
+            await ProcessAsync(result, cancellationToken);
         }
+    }
 
-        bool messageProcessed = await dbContext.ProcessedInboxMessages
-            .AnyAsyncEF(x => x.IdempotenceKey == inboxMessage.IdempotenceKey, cancellationToken);
+    private async Task ProcessAsync<TKey, TValue>(ConsumeResult<TKey, TValue> consumeResult, CancellationToken cancellationToken)
+    {
+        using var scope = _serviceProvider.CreateScope();
+        await using var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        
+        var headers = consumeResult.Message.Headers.ToDictionary(x => x.Key, x => Encoding.UTF8.GetString(x.GetValueBytes()));
+        var idempotenceKey = headers[HeaderNames.IdempotenceKey];
+
+        var messageProcessed = await dbContext.ProcessedInboxMessages
+            .AnyAsync(x => x.IdempotenceKey == idempotenceKey, cancellationToken);
         if (!messageProcessed)
         {
             try
             {
-                await ProcessMessageAsync(inboxMessage, scope.ServiceProvider, cancellationToken);
+                var context = Propagators.DefaultTextMapPropagator.Extract(default, headers, (d, s) => d.Where(x => x.Key == s).Select(x => x.Value).ToArray());
+                using var activity = ActivitySources.ExactlyOnce.StartActivity("Processing", ActivityKind.Internal, context.ActivityContext);
+
+                await ProcessMessageAsync(consumeResult, idempotenceKey, scope.ServiceProvider, cancellationToken);
             }
             catch (DbUpdateException dpDbUpdateException) when(dpDbUpdateException.InnerException is PostgresException {SqlState: "23505", ConstraintName: "pk_processed_inbox_messages"})
             {
-                _logger.LogInformation("Message already processed: {IdempotenceKey}", inboxMessage.IdempotenceKey);
+                _logger.LogInformation("Message already processed: {IdempotenceKey}", idempotenceKey);
             }
         }
         else
         {
-            _logger.LogInformation("Message already processed: {IdempotenceKey}", inboxMessage.IdempotenceKey);
+            _logger.LogInformation("Message already processed: {IdempotenceKey}", idempotenceKey);
         }
-
-        await dbContext.InboxMessageOffsets
-            .Where(x => x.Id == offset.Id)
-            .ExecuteUpdateAsync(x => x
-                    .SetProperty(p => p.LastProcessedOffset, inboxMessage.Offset)
-                    .SetProperty(p => p.AvailableAfter, DateTime.UtcNow),
-                cancellationToken);
-
-        return true;
     }
-
-    private async Task ProcessMessageAsync(InboxMessage message, IServiceProvider serviceProvider, CancellationToken cancellationToken)
+    
+    private async Task ProcessMessageAsync<TKey, TValue>(ConsumeResult<TKey, TValue> message, string idempotenceKey, IServiceProvider serviceProvider, CancellationToken cancellationToken)
     {
-        var context = Propagators.DefaultTextMapPropagator.Extract(default, message.Headers, (d, s) => d.Where(x => x.Key == s).Select(x => x.Value).ToArray());
-        using var activity = ActivitySources.ExactlyOnce.StartActivity("Processing", ActivityKind.Internal, context.ActivityContext);
-
         IRequest command = message.Topic switch
         {
-            TopicNames.Topic1 => new Topic1Command(message.Payload, message.IdempotenceKey),
-            TopicNames.Topic2 => new Topic2Command(message.Payload, message.IdempotenceKey),
+            TopicNames.Topic1 => new Topic1Command(message.Message.Value, idempotenceKey),
+            TopicNames.Topic2 => new Topic2Command(message.Message.Value, idempotenceKey),
             _ => throw new ArgumentOutOfRangeException()
         };
 

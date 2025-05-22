@@ -1,15 +1,15 @@
 using System.Text;
 using System.Text.Json;
 using Confluent.Kafka;
-using ExactlyOnce.Configs;
-using ExactlyOnce.Db;
-using ExactlyOnce.Entities;
+using ExactlyOnceInbox.Configs;
+using ExactlyOnceInbox.Db;
+using ExactlyOnceInbox.Entities;
 using LinqToDB;
 using LinqToDB.Data;
 using LinqToDB.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 
-namespace ExactlyOnce.BackgroundServices;
+namespace ExactlyOnceInbox.BackgroundServices;
 
 public class InboxBackgroundService : BackgroundService
 {

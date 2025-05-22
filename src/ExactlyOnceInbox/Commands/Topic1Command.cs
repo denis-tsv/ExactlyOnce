@@ -1,10 +1,10 @@
-using ExactlyOnce.Db;
-using ExactlyOnce.Entities;
+using ExactlyOnceInbox.Db;
+using ExactlyOnceInbox.Entities;
 using MediatR;
 
-namespace ExactlyOnce.Commands;
+namespace ExactlyOnceInbox.Commands;
 
-public record Topic1Command(object Payload, string IdempotenceKey) : IRequest;
+public record Topic1Command(string Payload, string IdempotenceKey) : IRequest;
 
 public class Topic1CommandHandler : IRequestHandler<Topic1Command>
 {
@@ -18,7 +18,7 @@ public class Topic1CommandHandler : IRequestHandler<Topic1Command>
         // ...
         
         //add processed message
-        _dbContext.ProcessedInboxMessages.Add(new ProcessedMessage
+        _dbContext.ProcessedInboxMessages.Add(new ProcessedInboxMessage
         {
             IdempotenceKey = request.IdempotenceKey
         });

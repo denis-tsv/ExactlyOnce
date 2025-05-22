@@ -1,9 +1,9 @@
-using ExactlyOnce.Configs;
-using ExactlyOnce.Entities;
+using ExactlyOnceInbox.Configs;
+using ExactlyOnceInbox.Entities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
-namespace ExactlyOnce.Db.EntityTypeConfigurations;
+namespace ExactlyOnceInbox.Db.EntityTypeConfigurations;
 
 public class InboxMessageOffsetEntityTypeConfiguration : IEntityTypeConfiguration<InboxMessageOffset>
 {

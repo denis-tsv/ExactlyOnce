@@ -4,9 +4,9 @@ using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
 namespace ExactlyOnce.Db.EntityTypeConfigurations;
 
-public class ProcessedInboxMessageEntityTypeConfiguration : IEntityTypeConfiguration<ProcessedInboxMessage>
+public class ProcessedInboxMessageEntityTypeConfiguration : IEntityTypeConfiguration<ProcessedMessage>
 {
-    public void Configure(EntityTypeBuilder<ProcessedInboxMessage> builder)
+    public void Configure(EntityTypeBuilder<ProcessedMessage> builder)
     {
         builder.HasKey(x => x.IdempotenceKey);
         

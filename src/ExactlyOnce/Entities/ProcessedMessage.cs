@@ -1,6 +1,6 @@
 namespace ExactlyOnce.Entities;
 
-public class ProcessedInboxMessage
+public class ProcessedMessage
 {
     public string IdempotenceKey { get; set; } = null!;
 }

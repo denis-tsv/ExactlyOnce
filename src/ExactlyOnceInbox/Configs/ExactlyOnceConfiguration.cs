@@ -1,4 +1,4 @@
-namespace ExactlyOnce.Configs;
+namespace ExactlyOnceInbox.Configs;
 
 public class ExactlyOnceConfiguration
 {

@@ -1,11 +1,12 @@
 using System.Diagnostics;
 using System.Text;
 using Confluent.Kafka;
-using ExactlyOnce.BackgroundServices;
-using ExactlyOnce.Commands;
-using ExactlyOnce.Configs;
-using ExactlyOnce.Db;
-using ExactlyOnce.Telemetry;
+using ExactlyOnceInbox.BackgroundServices;
+using ExactlyOnceInbox.Commands;
+using ExactlyOnceInbox.Configs;
+using ExactlyOnceInbox.Db;
+using ExactlyOnceInbox.Telemetry;
+using LinqToDB.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
 
@@ -24,12 +25,18 @@ builder.Services.AddDbContextPool<AppDbContext>(optionsBuilder =>
         .UseNpgsql(
             dataSource,
             options => options.MigrationsHistoryTable("_migrations", "exactly_once"))
-        .UseSnakeCaseNamingConvention();
+        .UseSnakeCaseNamingConvention()
+        .AddInterceptors(new ForUpdateInterceptor());
 });
+LinqToDBForEFTools.Implementation = new CustomLinqToDBForEFToolsImpl(builder.Configuration.GetConnectionString("ExactlyOnce")!);
+LinqToDBForEFTools.Initialize();
 
+builder.Services.AddHostedService<InboxBackgroundService>();
 builder.Services.AddHostedService<ExactlyOnceBackgroundService>();
 
 builder.Services.AddMediatR(cfg => cfg.RegisterServicesFromAssemblyContaining<Topic1Command>());
+
+builder.Services.Configure<ExactlyOnceConfiguration>(builder.Configuration.GetSection("ExactlyOnce"));
 
 var app = builder.Build();
 
