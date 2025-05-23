@@ -5,6 +5,7 @@ using ExactlyOnceInbox.Db;
 using ExactlyOnceInbox.Entities;
 using ExactlyOnceInbox.Telemetry;
 using LinqToDB;
+using LinqToDB.Data;
 using LinqToDB.DataProvider.PostgreSQL;
 using LinqToDB.EntityFrameworkCore;
 using MediatR;
@@ -53,34 +54,17 @@ public class ExactlyOnceBackgroundService : BackgroundService
         await using var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         await using var dataConnection = dbContext.CreateLinqToDBConnection();
 
-        var offsets = await dataConnection.GetTable<InboxMessageOffset>()
-            .Where(x => x.AvailableAfter < DateTime.UtcNow)
-            .OrderBy(x => x.AvailableAfter)
-            .Take(1)
-            .SubQueryHint(PostgreSQLHints.ForUpdate)
-            .SubQueryHint(PostgreSQLHints.SkipLocked)
-            .AsSubQuery()
-            .UpdateWithOutput(x => x,
-                x => new InboxMessageOffset
-                {
-                    AvailableAfter = x.AvailableAfter + _options.Value.LockedDelay
-                },
-                (_, _, inserted) => inserted)
-            .AsQueryable()
-            .ToArrayAsyncLinqToDB(cancellationToken);
-        var offset = offsets.FirstOrDefault();
+        var offset = await GelOffsetDetachedAsync(dataConnection, cancellationToken);
         if (offset == null) return false;
 
-        var inboxMessage = await dbContext.InboxMessages
-            .Where(x => x.Topic == offset.Topic &&
-                        x.Partition == offset.Partition &&
-                        x.Offset > offset.LastProcessedOffset)
-            .OrderBy(x => x.Offset)
-            .FirstOrDefaultAsyncEF(cancellationToken);
+        var inboxMessage = await GetMessageAsync(dbContext, offset, cancellationToken);
         if (inboxMessage == null)
         {
-            offset.AvailableAfter = DateTime.UtcNow + _options.Value.NoInboxMessagesDelay;
-            await dbContext.SaveChangesAsync(cancellationToken);
+            await UpdateOffsetAsync(dbContext, 
+                id: offset.Id, 
+                offset: offset.LastProcessedOffset, // the same value
+                availableAfter: DateTime.UtcNow + _options.Value.NoInboxMessagesDelay, 
+                cancellationToken);
             return true;
         }
 
@@ -108,14 +92,54 @@ public class ExactlyOnceBackgroundService : BackgroundService
             _logger.LogInformation("Message already processed: {IdempotenceKey}", inboxMessage.IdempotenceKey);
         }
 
-        await dbContext.InboxMessageOffsets
-            .Where(x => x.Id == offset.Id)
-            .ExecuteUpdateAsync(x => x
-                    .SetProperty(p => p.LastProcessedOffset, inboxMessage.Offset)
-                    .SetProperty(p => p.AvailableAfter, DateTime.UtcNow),
-                cancellationToken);
+        await UpdateOffsetAsync(dbContext, 
+            id: offset.Id, 
+            offset: inboxMessage.Offset, 
+            availableAfter: DateTime.UtcNow, 
+            cancellationToken);
 
         return true;
+    }
+
+    private static async Task<InboxMessage?> GetMessageAsync(AppDbContext dbContext, InboxMessageOffset offset, CancellationToken cancellationToken)
+    {
+        var inboxMessage = await dbContext.InboxMessages
+            .Where(x => x.Topic == offset.Topic &&
+                        x.Partition == offset.Partition &&
+                        x.Offset > offset.LastProcessedOffset)
+            .OrderBy(x => x.Offset)
+            .FirstOrDefaultAsyncEF(cancellationToken);
+        return inboxMessage;
+    }
+
+    private static async Task UpdateOffsetAsync(AppDbContext dbContext, int id, long offset, DateTime availableAfter, CancellationToken cancellationToken)
+    {
+        await dbContext.InboxMessageOffsets
+            .Where(x => x.Id == id)
+            .ExecuteUpdateAsync(x => x
+                    .SetProperty(p => p.LastProcessedOffset, offset)
+                    .SetProperty(p => p.AvailableAfter, availableAfter),
+                cancellationToken);
+    }
+
+    private async Task<InboxMessageOffset?> GelOffsetDetachedAsync(DataConnection dataConnection, CancellationToken cancellationToken)
+    {
+        var offsets = await dataConnection.GetTable<InboxMessageOffset>()
+            .Where(x => x.AvailableAfter < DateTime.UtcNow)
+            .OrderBy(x => x.AvailableAfter)
+            .Take(1)
+            .SubQueryHint(PostgreSQLHints.ForUpdate)
+            .SubQueryHint(PostgreSQLHints.SkipLocked)
+            .AsSubQuery()
+            .UpdateWithOutput(x => x,
+                x => new InboxMessageOffset
+                {
+                    AvailableAfter = x.AvailableAfter + _options.Value.LockedDelay
+                },
+                (_, _, inserted) => inserted)
+            .AsQueryable()
+            .ToArrayAsyncLinqToDB(cancellationToken);
+        return offsets.FirstOrDefault();
     }
 
     private async Task ProcessMessageAsync(InboxMessage message, IServiceProvider serviceProvider, CancellationToken cancellationToken)
@@ -125,8 +149,8 @@ public class ExactlyOnceBackgroundService : BackgroundService
 
         IRequest command = message.Topic switch
         {
-            TopicNames.Topic1 => new Topic1Command(message.Payload, message.IdempotenceKey),
-            TopicNames.Topic2 => new Topic2Command(message.Payload, message.IdempotenceKey),
+            TopicNames.Topic1 => new NotIdempotentCommand(message.Payload, message.IdempotenceKey),
+            TopicNames.Topic2 => new IdempotentCommand(message.Payload, message.IdempotenceKey),
             _ => throw new ArgumentOutOfRangeException()
         };
 

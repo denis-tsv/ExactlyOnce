@@ -99,8 +99,8 @@ public class ExactlyOnceBackgroundService : BackgroundService
     {
         IRequest command = message.Topic switch
         {
-            TopicNames.Topic1 => new Topic1Command(message.Message.Value, idempotenceKey),
-            TopicNames.Topic2 => new Topic2Command(message.Message.Value, idempotenceKey),
+            TopicNames.Topic1 => new NotIdempotentCommand(message.Message.Value, idempotenceKey),
+            TopicNames.Topic2 => new IdempotentCommand(message.Message.Value, idempotenceKey),
             _ => throw new ArgumentOutOfRangeException()
         };
 

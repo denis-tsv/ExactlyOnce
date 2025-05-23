@@ -6,6 +6,7 @@ using ExactlyOnce.Commands;
 using ExactlyOnce.Configs;
 using ExactlyOnce.Db;
 using ExactlyOnce.Telemetry;
+using LinqToDB.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
 
@@ -26,10 +27,12 @@ builder.Services.AddDbContextPool<AppDbContext>(optionsBuilder =>
             options => options.MigrationsHistoryTable("_migrations", "exactly_once"))
         .UseSnakeCaseNamingConvention();
 });
+LinqToDBForEFTools.Implementation = new CustomLinqToDBForEFToolsImpl(builder.Configuration.GetConnectionString("ExactlyOnce")!);
+LinqToDBForEFTools.Initialize();
 
 builder.Services.AddHostedService<ExactlyOnceBackgroundService>();
 
-builder.Services.AddMediatR(cfg => cfg.RegisterServicesFromAssemblyContaining<Topic1Command>());
+builder.Services.AddMediatR(cfg => cfg.RegisterServicesFromAssemblyContaining<NotIdempotentCommand>());
 
 var app = builder.Build();
 

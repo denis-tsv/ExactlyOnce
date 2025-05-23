@@ -34,7 +34,7 @@ LinqToDBForEFTools.Initialize();
 builder.Services.AddHostedService<InboxBackgroundService>();
 builder.Services.AddHostedService<ExactlyOnceBackgroundService>();
 
-builder.Services.AddMediatR(cfg => cfg.RegisterServicesFromAssemblyContaining<Topic1Command>());
+builder.Services.AddMediatR(cfg => cfg.RegisterServicesFromAssemblyContaining<NotIdempotentCommand>());
 
 builder.Services.Configure<ExactlyOnceConfiguration>(builder.Configuration.GetSection("ExactlyOnce"));
 

@@ -65,7 +65,19 @@ public class InboxBackgroundService : BackgroundService
                 
                 results.Add(result);
             }
-            if (results.Any()) await ProcessAsync(results, cancellationToken);
+
+            if (!results.Any()) continue;
+            
+            try
+            {
+                await ProcessAsync(results, cancellationToken);
+                consumer.Commit(results.Last());
+            }
+            catch (Exception e)
+            {
+                _logger.LogError(e, "Error");
+                consumer.Seek(results.First().TopicPartitionOffset);
+            }
         }
     }
 

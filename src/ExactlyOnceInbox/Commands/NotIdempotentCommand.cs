@@ -6,18 +6,18 @@ using MediatR;
 
 namespace ExactlyOnceInbox.Commands;
 
-public record Topic1Command(string Payload, string IdempotenceKey) : IRequest;
+public record NotIdempotentCommand(string Payload, string IdempotenceKey) : IRequest;
 
-public class Topic1CommandHandler : IRequestHandler<Topic1Command>
+public class NotIdempotentCommandHandler : IRequestHandler<NotIdempotentCommand>
 {
     private readonly AppDbContext _dbContext;
 
-    public Topic1CommandHandler(AppDbContext dbContext) => _dbContext = dbContext;
+    public NotIdempotentCommandHandler(AppDbContext dbContext) => _dbContext = dbContext;
 
-    public async Task Handle(Topic1Command request, CancellationToken cancellationToken)
+    public async Task Handle(NotIdempotentCommand request, CancellationToken cancellationToken)
     {
         //change business entities
-        // ...
+        // _dbContext.Users.Add(new User { Email = "new_value"});  
         
         await using var transaction = await _dbContext.Database.BeginTransactionAsync(cancellationToken);
         await using var dataConnection = _dbContext.CreateLinqToDBConnection();        
